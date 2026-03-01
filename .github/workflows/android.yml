@@ -11,31 +11,35 @@ jobs:
       # 1. Забираем репозиторий
       - uses: actions/checkout@v3
 
-      # 2. Устанавливаем unzip и JDK 17
-      - name: Install unzip & JDK
+      # 2. Скачиваем Gradle 8.2 и собираем APK в одном шаге
+      - name: Build APK with Gradle 8.2
         run: |
+          # Устанавливаем unzip и JDK 17
           sudo apt-get update
           sudo apt-get install -y unzip openjdk-17-jdk
 
-      # 3. Скачиваем и настраиваем Gradle 8.2
-      - name: Download and setup Gradle 8.2
-        run: |
+          # Скачиваем Gradle 8.2
           wget https://services.gradle.org/distributions/gradle-8.2-bin.zip
+
+          # Распаковываем Gradle
           unzip gradle-8.2-bin.zip -d $HOME/gradle
+
+          # Добавляем Gradle в PATH
           export PATH=$HOME/gradle/gradle-8.2/bin:$PATH
+
+          # Проверяем версию Gradle
           gradle --version
 
-      # 4. Распаковываем ZIP с проектом
-      - name: Unzip project
-        run: unzip 1.zip -d project
+          # Распаковываем ZIP с проектом
+          unzip 1.zip -d project
 
-      # 5. Сборка APK
-      - name: Build APK
-        run: |
+          # Переходим в папку проекта
           cd project
+
+          # Собираем APK
           gradle assembleDebug
 
-      # 6. Загрузка APK как артефакт
+      # 3. Загружаем APK как артефакт
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
