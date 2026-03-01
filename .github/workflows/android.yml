@@ -1,4 +1,4 @@
-name: Build APK from ZIP (no gradlew)
+name: Build APK with Gradle 8.2
 
 on:
   push:
@@ -10,10 +10,17 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Install unzip & gradle
+      - name: Install unzip & JDK 17
         run: |
           sudo apt-get update
-          sudo apt-get install -y unzip gradle openjdk-17-jdk
+          sudo apt-get install -y unzip openjdk-17-jdk
+
+      - name: Download Gradle 8.2
+        run: |
+          wget https://services.gradle.org/distributions/gradle-8.2-bin.zip
+          unzip gradle-8.2-bin.zip -d $HOME/gradle
+          export PATH=$HOME/gradle/gradle-8.2/bin:$PATH
+          gradle --version
 
       - name: Unzip project
         run: unzip 1.zip -d project
