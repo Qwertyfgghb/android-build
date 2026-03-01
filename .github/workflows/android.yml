@@ -1,4 +1,4 @@
-name: Build APK from ZIP
+name: Build APK from ZIP (no gradlew)
 
 on:
   push:
@@ -10,19 +10,18 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Install unzip
-        run: sudo apt-get update && sudo apt-get install -y unzip
+      - name: Install unzip & gradle
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip gradle openjdk-17-jdk
 
       - name: Unzip project
         run: unzip 1.zip -d project
 
-      - name: Grant permission
-        run: chmod +x project/gradlew
-
       - name: Build APK
         run: |
           cd project
-          ./gradlew assembleDebug
+          gradle assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
