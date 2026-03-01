@@ -1,4 +1,4 @@
-name: Build APK
+name: Build APK from ZIP
 
 on:
   push:
@@ -10,20 +10,25 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Setup JDK
-        uses: actions/setup-java@v3
-        with:
-          distribution: temurin
-          java-version: 11
+      - name: Install unzip
+        run: sudo apt-get install unzip
 
-      - name: Grant permission
-        run: chmod +x gradlew
+      - name: Unzip project
+        run: unzip 1.zip
+
+      - name: List files
+        run: ls
+
+      - name: Find gradlew
+        run: chmod +x */gradlew
 
       - name: Build APK
-        run: ./gradlew assembleDebug
+        run: |
+          cd */
+          ./gradlew assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v3
         with:
           name: apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: */app/build/outputs/apk/debug/*.apk
