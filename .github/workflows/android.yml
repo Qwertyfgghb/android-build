@@ -1,7 +1,10 @@
-name: Build APK from ZIP
+name: Build TouchMeNot APK
 
 on:
   push:
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
   build:
@@ -9,39 +12,37 @@ jobs:
 
     steps:
       # 1. Забираем репозиторий
-      - uses: actions/checkout@v3
+      - name: Checkout repo
+        uses: actions/checkout@v3
 
-      # 2. Скачиваем Gradle 8.2 и собираем APK в одном шаге
-      - name: Build APK with Gradle 8.2
+      # 2. Устанавливаем зависимости: JDK 17 и unzip
+      - name: Install dependencies
         run: |
-          # Устанавливаем unzip и JDK 17
           sudo apt-get update
           sudo apt-get install -y unzip openjdk-17-jdk
 
-          # Скачиваем Gradle 8.2
-          wget https://services.gradle.org/distributions/gradle-8.2-bin.zip
-
-          # Распаковываем Gradle
-          unzip gradle-8.2-bin.zip -d $HOME/gradle
-
-          # Добавляем Gradle в PATH
-          export PATH=$HOME/gradle/gradle-8.2/bin:$PATH
-
-          # Проверяем версию Gradle
-          gradle --version
-
-          # Распаковываем ZIP с проектом
+      # 3. Распаковываем ZIP с проектом
+      - name: Unzip project
+        run: |
+          mkdir project
           unzip 1.zip -d project
+          ls -R project
 
-          # Переходим в папку проекта
-          cd project
+      # 4. Делаем gradlew исполняемым
+      - name: Make gradlew executable
+        run: |
+          cd project/1         # <-- укажи путь к корню Android проекта внутри ZIP
+          chmod +x gradlew
 
-          # Собираем APK
-          gradle assembleDebug
+      # 5. Собираем APK через gradlew
+      - name: Build APK
+        working-directory: project/1
+        run: |
+          ./gradlew clean assembleDebug --stacktrace
 
-      # 3. Загружаем APK как артефакт
+      # 6. Загружаем APK как артефакт
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: apk
-          path: project/app/build/outputs/apk/debug/app-debug.apk
+          name: TouchMeNot-Debug-APK
+          path: project/1/app/build/outputs/apk/debug/app-debug.apk
