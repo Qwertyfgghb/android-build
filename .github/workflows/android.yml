@@ -36,7 +36,7 @@ jobs:
       - name: Build APK
         run: |
           cd project
-          ./gradle:app:assembleDebug --no-daemon
+          gradle :app:assembleDebug --no-daemon
 
       # 6. Загружаем APK как артефакт
       - name: Upload APK
