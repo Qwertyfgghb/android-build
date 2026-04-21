@@ -20,13 +20,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y unzip openjdk-17-jdk
 
-      # 3. Скачиваем и настраиваем Gradle 8.2
+      # 3. Скачиваем и распаковываем Gradle 8.2
       - name: Install Gradle 8.2
         run: |
           wget https://services.gradle.org/distributions/gradle-8.2-bin.zip
           unzip gradle-8.2-bin.zip -d $HOME/gradle
-          export PATH=$HOME/gradle/gradle-8.2/bin:$PATH
-          gradle --version
+          echo "PATH=$HOME/gradle/gradle-8.2/bin:$PATH" >> $GITHUB_ENV
 
       # 4. Распаковываем ZIP с проектом
       - name: Unzip project
@@ -38,7 +37,7 @@ jobs:
           cd project
           gradle projects
 
-      # 6. Собираем APK модуля app
+      # 6. Собираем APK модуля app с полным путем к Gradle
       - name: Build APK
         run: |
           cd project
