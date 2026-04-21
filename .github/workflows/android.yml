@@ -1,70 +1,47 @@
-name: Build APK from ZIP automatically
+name: Build APK from ZIP
 
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Забираем репозиторий
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      # 1. Забираем репозиторий
+      - uses: actions/checkout@v3
 
-      # 2️⃣ Устанавливаем JDK и unzip
-      - name: Install dependencies
+      # 2. Скачиваем Gradle 8.2 и собираем APK в одном шаге
+      - name: Build APK with Gradle 8.2
         run: |
+          # Устанавливаем unzip и JDK 17
           sudo apt-get update
           sudo apt-get install -y unzip openjdk-17-jdk
 
-      # 3️⃣ Распаковываем ZIP с проектом
-      - name: Unzip project
-        run: |
-          mkdir project
+          # Скачиваем Gradle 8.2
+          wget https://services.gradle.org/distributions/gradle-8.2-bin.zip
+
+          # Распаковываем Gradle
+          unzip gradle-8.2-bin.zip -d $HOME/gradle
+
+          # Добавляем Gradle в PATH
+          export PATH=$HOME/gradle/gradle-8.2/bin:$PATH
+
+          # Проверяем версию Gradle
+          gradle --version
+
+          # Распаковываем ZIP с проектом
           unzip 1.zip -d project
-          ls -R project
 
-      # 4️⃣ Определяем корень Android проекта
-      - name: Detect project root
-        id: detect-root
-        run: |
-          # ищем settings.gradle(.kts)
-          ROOT_DIR=$(find project -type f -name "settings.gradle*" | head -n 1 | xargs dirname)
-          if [ -z "$ROOT_DIR" ]; then
-            echo "settings.gradle not found, creating minimal one"
-            # предполагаем, что app/ есть
-            ROOT_DIR=$(find project -type d -name "app" | head -n 1)/..
-            mkdir -p "$ROOT_DIR"
-            echo "include ':app'" > "$ROOT_DIR/settings.gradle"
-          fi
-          echo "Project root detected: $ROOT_DIR"
-          echo "root_dir=$ROOT_DIR" >> $GITHUB_OUTPUT
+          # Переходим в папку проекта
+          cd project
 
-      # 5️⃣ Делаем gradlew исполняемым
-      - name: Make gradlew executable
-        run: |
-          cd ${{ steps.detect-root.outputs.root_dir }}
-          if [ ! -f gradlew ]; then
-            echo "gradlew not found, downloading Gradle Wrapper"
-            curl -s https://services.gradle.org/distributions/gradle-8.2-bin.zip -o gradle.zip
-            unzip gradle.zip -d gradle
-            # создаём минимальный gradlew wrapper
-            ./gradle/gradle-8.2/bin/gradle wrapper
-          fi
-          chmod +x gradlew
+          # Собираем APK
+          gradle assembleDebug
 
-      # 6️⃣ Собираем APK
-      - name: Build APK
-        working-directory: ${{ steps.detect-root.outputs.root_dir }}
-        run: ./gradlew clean assembleDebug --stacktrace
-
-      # 7️⃣ Загружаем APK
+      # 3. Загружаем APK как артефакт
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: TouchMeNot-Debug-APK
-          path: ${{ steps.detect-root.outputs.root_dir }}/app/build/outputs/apk/debug/app-debug.apk
+          name: apk
+          path: project/app/build/outputs/apk/debug/app-debug.apk
