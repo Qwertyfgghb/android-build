@@ -37,7 +37,7 @@ jobs:
           cd project
           gradle projects
 
-      # 6. Собираем APK модуля app с полным путем к Gradle
+      # 6. Собираем APK модуля app
       - name: Build APK
         run: |
           cd project
