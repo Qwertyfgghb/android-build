@@ -1,9 +1,10 @@
-name: Build APK from ZIP
+name: /devil - Build APK
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   build:
@@ -21,44 +22,42 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # 3. Gradle 8.2
-      - name: Install Gradle 8.2
-        run: |
-          wget -q https://services.gradle.org/distributions/gradle-8.2-bin.zip
-          unzip -q gradle-8.2-bin.zip -d "$HOME/gradle"
-          echo "$HOME/gradle/gradle-8.2/bin" >> "$GITHUB_PATH"
-
-      # 4. Распаковываем 1.zip
-      - name: Unzip project
+      # 3. Распаковываем именно devil-screen-on3.zip
+      - name: Unzip /devil
         run: |
           rm -rf project
           mkdir project
-          unzip -q 1.zip -d project
+          unzip -q devil-screen-on3.zip -d project
 
-      # 5. Проверяем проект
+      # 4. Проверяем структуру
       - name: Check project
         run: |
-          cd project
+          cd project/devil_work
           echo "=== Project ==="
           ls -la
           echo "=== App ==="
           ls -la app
+          echo "=== Hook ==="
+          ls -la hook
 
-      # 6. Проверяем Gradle
-      - name: List Gradle projects
+      # 5. Проверяем Gradle
+      - name: Check Gradle
         run: |
-          cd project
-          gradle projects --no-daemon
+          cd project/devil_work
+          chmod +x gradlew
+          ./gradlew projects --no-daemon
 
-      # 7. Собираем APK
+      # 6. Собираем APK
       - name: Build APK
         run: |
-          cd project
-          gradle :app:assembleDebug --no-daemon --warning-mode all
+          cd project/devil_work
+          chmod +x gradlew
+          ./gradlew :app:assembleDebug --no-daemon --stacktrace --warning-mode all
 
-      # 8. Загружаем APK
+      # 7. Загружаем APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: RadioRecorder-debug
-          path: project/app/build/outputs/apk/debug/app-debug.apk
+          name: devil-debug
+          path: project/devil_work/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
