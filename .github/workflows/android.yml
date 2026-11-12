@@ -145,7 +145,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.2'
-          cache-cleanup: on-validation-failure
+          
 
       # 8. Check Gradle — с --refresh-dependencies
       - name: Check Gradle
