@@ -23,7 +23,16 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # 3. Find ANY ZIP and extract it
+      # 3. Очистить битый кэш Gradle ДО setup-gradle
+      - name: Clean broken Gradle jar cache
+        shell: bash
+        run: |
+          set -e
+          rm -rf ~/.gradle/caches/jars-9
+          rm -rf ~/.gradle/caches/modules-2/files-2.1/org.bouncycastle
+          echo "Gradle jar cache cleaned"
+
+      # 4. Find ANY ZIP and extract it
       - name: Find and unzip project
         shell: bash
         run: |
@@ -52,7 +61,7 @@ jobs:
           echo "=== Extracted structure ==="
           find project -maxdepth 4 -type f | sort
 
-      # 4. Automatically find Gradle project
+      # 5. Automatically find Gradle project
       - name: Detect Android project
         shell: bash
         run: |
@@ -60,7 +69,6 @@ jobs:
 
           PROJECT_DIR=""
 
-          # Preferred: settings.gradle
           SETTINGS=$(find project -type f \
             \( -name "settings.gradle" -o -name "settings.gradle.kts" \) \
             -print -quit)
@@ -69,7 +77,6 @@ jobs:
             PROJECT_DIR=$(dirname "$SETTINGS")
           fi
 
-          # Fallback: find app + build.gradle
           if [ -z "$PROJECT_DIR" ]; then
             APP_DIR=$(find project -type d -name "app" -print -quit)
 
@@ -100,7 +107,7 @@ jobs:
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      # 5. Check structure
+      # 6. Check structure
       - name: Check project
         shell: bash
         run: |
@@ -133,13 +140,14 @@ jobs:
             -o -name "gradlew" \) \
             -print
 
-      # 6. Setup Gradle 8.2
+      # 7. Setup Gradle 8.2 — с автоочисткой битого кэша
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.2'
+          cache-cleanup: on-validation-failure
 
-      # 7. Check Gradle
+      # 8. Check Gradle — с --refresh-dependencies
       - name: Check Gradle
         shell: bash
         run: |
@@ -154,9 +162,10 @@ jobs:
 
           gradle projects \
             --no-daemon \
+            --refresh-dependencies \
             --stacktrace
 
-      # 8. Build APK
+      # 9. Build APK — с --refresh-dependencies
       - name: Build APK
         shell: bash
         run: |
@@ -168,10 +177,11 @@ jobs:
 
           gradle :app:assembleDebug \
             --no-daemon \
+            --refresh-dependencies \
             --stacktrace \
             --warning-mode all
 
-      # 9. Find APK automatically
+      # 10. Find APK automatically
       - name: Find APK
         shell: bash
         run: |
@@ -204,7 +214,7 @@ jobs:
 
           echo "APK_PATH=$APK" >> "$GITHUB_ENV"
 
-      # 10. Upload APK
+      # 11. Upload APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
