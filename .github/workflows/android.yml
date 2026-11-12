@@ -16,7 +16,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Очистка места на диске (критично для GitHub Actions)
+      # 2. Очистка места на диске
       - name: Free Disk Space (Ubuntu)
         run: |
           sudo rm -rf /usr/share/dotnet
@@ -37,188 +37,124 @@ jobs:
         shell: bash
         run: |
           set -e
-
-          rm -rf project
-          mkdir -p project
-
-          echo "=== ZIP files ==="
-          find . -maxdepth 1 -type f -iname "*.zip" -print
-
+          rm -rf project && mkdir -p project
           ZIP_FILE=$(find . -maxdepth 1 -type f -iname "*.zip" -print -quit)
-
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: No ZIP archive found"
-            exit 1
+            echo "ERROR: No ZIP archive found"; exit 1
           fi
-
-          echo
-          echo "Using archive:"
-          echo "$ZIP_FILE"
-
           unzip -q "$ZIP_FILE" -d project
-
-          echo
-          echo "=== Extracted structure ==="
-          find project -maxdepth 4 -type f | sort
 
       # 5. Automatically find Gradle project
       - name: Detect Android project
         shell: bash
         run: |
           set -e
-
           PROJECT_DIR=""
-
-          SETTINGS=$(find project -type f \
-            \( -name "settings.gradle" -o -name "settings.gradle.kts" \) \
-            -print -quit)
-
+          SETTINGS=$(find project -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) -print -quit)
           if [ -n "$SETTINGS" ]; then
             PROJECT_DIR=$(dirname "$SETTINGS")
           fi
-
           if [ -z "$PROJECT_DIR" ]; then
             APP_DIR=$(find project -type d -name "app" -print -quit)
-
             if [ -n "$APP_DIR" ]; then
               PROJECT_DIR=$(dirname "$APP_DIR")
             fi
           fi
-
           if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: Gradle/Android project not found"
-            echo
-            echo "Possible project files:"
-            find project -type f \
-              \( -name "settings.gradle" \
-              -o -name "settings.gradle.kts" \
-              -o -name "build.gradle" \
-              -o -name "build.gradle.kts" \
-              -o -name "AndroidManifest.xml" \) \
-              -print
-            exit 1
+            echo "ERROR: Gradle/Android project not found"; exit 1
           fi
-
-          echo
-          echo "======================================"
-          echo "ANDROID PROJECT FOUND:"
-          echo "$PROJECT_DIR"
-          echo "======================================"
-
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      # 6. Check structure
-      - name: Check project
+      # 6. Применяем фиксы Gradle (зеркало + Jetifier)
+      - name: Apply Gradle Fixes
         shell: bash
         run: |
           set -e
-
           cd "$PROJECT_DIR"
 
-          echo "=== Current directory ==="
-          pwd
+          # 6.1 Добавляем обход ошибки Jetifier для BouncyCastle
+          echo "android.jetifier.ignorelist=bcprov-jdk18on" >> gradle.properties
 
-          echo
-          echo "=== Project ==="
-          ls -la
+          # 6.2 Создаем init-скрипт для перенаправления Maven Central на зеркало Google
+          mkdir -p ~/.gradle/init.d
+          cat > ~/.gradle/init.d/maven_mirror.gradle << 'EOF'
+          def central = ~/^https:\/\/(repo\.maven\.apache\.org|repo1\.maven\.org)\/maven2\/?/
+          def mirror = 'https://maven-central.storage-download.googleapis.com/maven2/'
+          def fallback = 'mavenCentralBehindMirror'
+          def addFallback = { RepositoryHandler repositories ->
+              repositories.maven { name = fallback; url = 'https://repo.maven.apache.org/maven2/' }
+          }
+          def toMirror = { RepositoryHandler repositories ->
+              def hasFallback = false
+              repositories.all { repository ->
+                  if (repository.name == fallback) return
+                  if (repository instanceof MavenArtifactRepository) {
+                      def url = repository.url.toString()
+                      if (url =~ central) {
+                          repository.url = url.replaceFirst(central, mirror)
+                          if (!hasFallback) { hasFallback = true; addFallback(repositories); return }
+                      }
+                  }
+              }
+              def last = repositories.findByName(fallback)
+              if (hasFallback && !repositories.last().is(last)) {
+                  repositories.remove(last)
+                  repositories.add(last)
+              }
+          }
+          beforeSettings { settings ->
+              toMirror(settings.buildscript.repositories)
+              toMirror(settings.pluginManagement.repositories)
+              toMirror(settings.dependencyResolutionManagement.repositories)
+          }
+          settingsEvaluated { settings ->
+              if (settings.pluginManagement.repositories.isEmpty()) {
+                  settings.pluginManagement.repositories { repositories ->
+                      maven { url = mirror }
+                      addFallback(repositories)
+                      gradlePluginPortal()
+                  }
+              }
+          }
+          allprojects { project ->
+              toMirror(project.buildscript.repositories)
+              toMirror(project.repositories)
+          }
+          EOF
+          echo "Maven mirror init script applied."
 
-          echo
-          echo "=== App ==="
-          if [ -d "app" ]; then
-            ls -la app
-          else
-            echo "WARNING: app directory not found"
-          fi
-
-          echo
-          echo "=== Gradle files ==="
-          find . -maxdepth 3 -type f \
-            \( -name "build.gradle" \
-            -o -name "build.gradle.kts" \
-            -o -name "settings.gradle" \
-            -o -name "settings.gradle.kts" \
-            -o -name "gradlew" \) \
-            -print
-
-      # 7. Setup Gradle 8.2 (с отключенным кэшем, чтобы не тянуть битые файлы)
+      # 7. Setup Gradle 8.5 (обновленная версия)
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.2'
+          gradle-version: '8.5'
           cache-disabled: true
 
-      # 8. Check Gradle (с полной очисткой кэша перед запуском)
-      - name: Check Gradle
-        shell: bash
-        run: |
-          set -e
-
-          cd "$PROJECT_DIR"
-
-          # Полностью удаляем локальный кэш
-          rm -rf ~/.gradle
-
-          gradle --version
-
-          echo
-          echo "=== Gradle projects ==="
-
-          gradle projects \
-            --no-daemon \
-            --stacktrace
-
-      # 9. Build APK (с полной очисткой кэша перед запуском)
+      # 8. Build APK
       - name: Build APK
         shell: bash
         run: |
           set -e
-
           cd "$PROJECT_DIR"
-
-          # На всякий случай чистим еще раз
-          rm -rf ~/.gradle
-
+          rm -rf ~/.gradle/caches  # Очищаем кэш на всякий случай
           echo "=== Building APK ==="
-
           gradle :app:assembleDebug \
             --no-daemon \
             --stacktrace \
             --warning-mode all
 
-      # 10. Find APK automatically
+      # 9. Find APK automatically
       - name: Find APK
         shell: bash
         run: |
           set -e
-
-          echo "=== Searching for APK ==="
-
-          APK=$(find "$PROJECT_DIR" \
-            -type f \
-            -name "*.apk" \
-            -path "*/build/outputs/*" \
-            -print -quit)
-
+          APK=$(find "$PROJECT_DIR" -type f -name "*.apk" -path "*/build/outputs/*" -print -quit)
           if [ -z "$APK" ]; then
-            echo "ERROR: APK was not created"
-
-            echo
-            echo "=== Build directory ==="
-            find "$PROJECT_DIR" \
-              -type d \
-              -name "build" \
-              -print
-
-            exit 1
+            echo "ERROR: APK was not created"; exit 1
           fi
-
-          echo
-          echo "APK found:"
-          echo "$APK"
-
           echo "APK_PATH=$APK" >> "$GITHUB_ENV"
 
-      # 11. Upload APK
+      # 10. Upload APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
