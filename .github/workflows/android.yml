@@ -16,21 +16,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Java 17
+      # 2. Очистка места на диске (критично для GitHub Actions)
+      - name: Free Disk Space (Ubuntu)
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          df -h
+
+      # 3. Java 17
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-
-      # 3. Очистить битый кэш Gradle ДО setup-gradle
-      - name: Clean broken Gradle jar cache
-        shell: bash
-        run: |
-          set -e
-          rm -rf ~/.gradle/caches/jars-9
-          rm -rf ~/.gradle/caches/modules-2/files-2.1/org.bouncycastle
-          echo "Gradle jar cache cleaned"
 
       # 4. Find ANY ZIP and extract it
       - name: Find and unzip project
@@ -140,20 +140,23 @@ jobs:
             -o -name "gradlew" \) \
             -print
 
-      # 7. Setup Gradle 8.2 — с автоочисткой битого кэша
+      # 7. Setup Gradle 8.2 (с отключенным кэшем, чтобы не тянуть битые файлы)
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.2'
-          
+          cache-disabled: true
 
-      # 8. Check Gradle — с --refresh-dependencies
+      # 8. Check Gradle (с полной очисткой кэша перед запуском)
       - name: Check Gradle
         shell: bash
         run: |
           set -e
 
           cd "$PROJECT_DIR"
+
+          # Полностью удаляем локальный кэш
+          rm -rf ~/.gradle
 
           gradle --version
 
@@ -162,10 +165,9 @@ jobs:
 
           gradle projects \
             --no-daemon \
-            --refresh-dependencies \
             --stacktrace
 
-      # 9. Build APK — с --refresh-dependencies
+      # 9. Build APK (с полной очисткой кэша перед запуском)
       - name: Build APK
         shell: bash
         run: |
@@ -173,11 +175,13 @@ jobs:
 
           cd "$PROJECT_DIR"
 
+          # На всякий случай чистим еще раз
+          rm -rf ~/.gradle
+
           echo "=== Building APK ==="
 
           gradle :app:assembleDebug \
             --no-daemon \
-            --refresh-dependencies \
             --stacktrace \
             --warning-mode all
 
