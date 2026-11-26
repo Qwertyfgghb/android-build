@@ -44,26 +44,22 @@ jobs:
           fi
           unzip -q "$ZIP_FILE" -d project
 
-      # 5. Automatically find Gradle project
+      # 5. Automatically find Gradle project (УПРОЩЕНО)
       - name: Detect Android project
         shell: bash
         run: |
           set -e
-          PROJECT_DIR=""
-          SETTINGS=$(find project -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) -print -quit)
-          if [ -n "$SETTINGS" ]; then
-            PROJECT_DIR=$(dirname "$SETTINGS")
-          fi
+          # Ищем папку с проектом. Если в архиве только LSpot, она будет найдена.
+          PROJECT_DIR=$(find project -type f -name "settings.gradle*" -exec dirname {} \; | head -n 1)
+          
           if [ -z "$PROJECT_DIR" ]; then
-            APP_DIR=$(find project -type d -name "app" -print -quit)
-            if [ -n "$APP_DIR" ]; then
-              PROJECT_DIR=$(dirname "$APP_DIR")
-            fi
+            echo "ERROR: Gradle/Android project not found in ZIP"; 
+            find project -maxdepth 2 -type f;
+            exit 1
           fi
-          if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: Gradle/Android project not found"; exit 1
-          fi
+          
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Found project at: $PROJECT_DIR"
 
       # 6. Применяем фиксы Gradle (зеркало + Jetifier)
       - name: Apply Gradle Fixes
@@ -72,10 +68,8 @@ jobs:
           set -e
           cd "$PROJECT_DIR"
 
-          # 6.1 Добавляем обход ошибки Jetifier для BouncyCastle
           echo "android.jetifier.ignorelist=bcprov-jdk18on" >> gradle.properties
 
-          # 6.2 Создаем init-скрипт для перенаправления Maven Central на зеркало Google
           mkdir -p ~/.gradle/init.d
           cat > ~/.gradle/init.d/maven_mirror.gradle << 'EOF'
           def central = ~/^https:\/\/(repo\.maven\.apache\.org|repo1\.maven\.org)\/maven2\/?/
@@ -121,9 +115,8 @@ jobs:
               toMirror(project.repositories)
           }
           EOF
-          echo "Maven mirror init script applied."
 
-      # 7. Setup Gradle 8.5 (обновленная версия)
+      # 7. Setup Gradle 8.11.1
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -136,7 +129,7 @@ jobs:
         run: |
           set -e
           cd "$PROJECT_DIR"
-          rm -rf ~/.gradle/caches  # Очищаем кэш на всякий случай
+          rm -rf ~/.gradle/caches
           echo "=== Building APK ==="
           gradle :app:assembleDebug \
             --no-daemon \
@@ -150,7 +143,9 @@ jobs:
           set -e
           APK=$(find "$PROJECT_DIR" -type f -name "*.apk" -path "*/build/outputs/*" -print -quit)
           if [ -z "$APK" ]; then
-            echo "ERROR: APK was not created"; exit 1
+            echo "ERROR: APK was not created"
+            find "$PROJECT_DIR" -type f -name "*.apk"
+            exit 1
           fi
           echo "APK_PATH=$APK" >> "$GITHUB_ENV"
 
